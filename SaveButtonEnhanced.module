@@ -18,7 +18,7 @@ class SaveButtonEnhanced extends WireData implements Module {
 
         return array(
             'title' => 'SaveButtonEnhanced',
-            'version' => 1,
+            'version' => 2,
             'summary' => 'Display additional save actions',
             'href' => 'https://processwire.com',
             'singular' => true,
@@ -128,6 +128,8 @@ class SaveButtonEnhanced extends WireData implements Module {
                 $('.sbe_action').click(function(e) {
                     e.preventDefault();
                     $('#ProcessPageEdit').find('input[name=sbe_action]').attr('value', $(this).data('action'));
+                    // if any field has focus click the button twice
+                    if($('input:focus').length > 0) $($(this).data('submit')).click();
                     $($(this).data('submit')).click();
                 });
             });
