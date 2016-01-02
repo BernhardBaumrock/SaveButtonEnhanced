@@ -1,0 +1,166 @@
+<?php
+/**
+ * ProcessWire SaveButtonEnhanced
+ *
+ * Copyright (C) 2016 by Bernhard Baumrock
+ * This file licensed under MIT License
+ */
+
+class SaveButtonEnhanced extends WireData implements Module {
+
+    /**
+     * getModuleInfo is a module required by all modules to tell ProcessWire about them
+     *
+     * @return array
+     *
+     */
+    public static function getModuleInfo() {
+
+        return array(
+            'title' => 'SaveButtonEnhanced',
+            'version' => 1,
+            'summary' => 'Display additional save actions',
+            'href' => 'https://processwire.com',
+            'singular' => true,
+            'autoload' => true,
+            );
+    }
+
+
+    /**
+     * Initialize the module
+     */
+    public function init() {
+        $this->addHookAfter('Page::render', $this, 'modifybutton');
+        $this->addHookAfter('Pages::save', $this, 'redirectaftersave');
+    }
+
+    /**
+     * add unselect button
+     */
+    public function modifybutton($event) {
+        $page = $event->object;
+        if($page->process != 'ProcessPageEdit') return;
+        $p = wire('pages')->get(wire('input')->get->id);
+        
+        // array of actions
+        $actions = array();
+
+        // save + new
+        // not on root page
+        if($p->id != 1) {
+            $actions[] = array(
+                'action' => 'sbe_saveandnew',
+                'icon' => 'fa-plus',
+                'label' => _('Save and New'),
+                'buttons' => array('#submit_save', '#submit_save_unpublished')
+            );
+        }
+
+        // save + close
+        $actions[] = array(
+            'action' => 'sbe_saveandclose',
+            'icon' => 'fa-close',
+            'label' => _('Save and Close'),
+            'buttons' => array('#submit_save', '#submit_save_unpublished')
+        );
+
+        // publish and new
+        // not on root page
+        if($p->id != 1) {
+            $actions[] = array(
+                'action' => 'sbe_saveandnew',
+                'icon' => 'fa-plus',
+                'label' => _('Publish and New'),
+                'buttons' => array('#submit_publish')
+            );
+        }
+
+        // publish + close
+        $actions[] = array(
+            'action' => 'sbe_saveandclose',
+            'icon' => 'fa-close',
+            'label' => _('Publish and Close'),
+            'buttons' => array('#submit_publish')
+        );
+
+
+        // rearrange action lists according to buttons
+        $lists = array();
+        foreach($actions as $action) {
+            foreach($action['buttons'] as $key => $val) {
+                $lists[$val][] = array(
+                    'action' => $action['action'],
+                    'icon' => $action['icon'],
+                    'label' => $action['label']
+                );
+            }
+        }
+
+        $out = array();
+        foreach($lists as $key => $val) {
+            $out[$key] = "<ul class='dropdown-menu shortcuts' data-at='right bottom+1'>";
+            foreach($val as $action) {
+                $out[$key] .= "<li><a href='#' class='sbe_action'" .
+                    " data-action='" . $action['action'] . "'" .
+                    " data-submit='" . $key . "'>" .
+                    "<i class='fa fa-fw " . $action['icon'] . "'></i>&nbsp;" . $action['label'] .
+                    "</a></li>";
+            }
+            $out[$key] .= "</ul>";
+        }
+
+        ob_start(); ?>
+        <script type="text/javascript">
+            $(document).ready(function() {
+                // alter all affected buttons
+                <?php
+                foreach($out as $key => $val) {
+                    echo "$('" . $key . ", " . $key . "_copy')";
+                        echo ".addClass('dropdown-toggle')";
+                        echo ".after(\"" . $val . "\");\n\n";
+                }
+                ?>
+                ProcessWireAdminTheme.setupDropdowns();
+
+                // handle save actions
+                $('#ProcessPageEdit').append('<input type="hidden" name="sbe_action" value="">');
+                $('.sbe_action').click(function(e) {
+                    e.preventDefault();
+                    $('#ProcessPageEdit').find('input[name=sbe_action]').attr('value', $(this).data('action'));
+                    $($(this).data('submit')).click();
+                });
+            });
+        </script>
+        <?php
+        $script = ob_get_clean();
+        $event->return = str_replace("</body>", $script."</body>", $event->return);
+    }
+
+    /**
+     * redirect after page save
+     */
+    public function redirectaftersave($event) {
+        $page = $event->arguments[0];
+        $errors = wire('notices');
+        $input = wire('input');
+        $config = wire('config');
+        $session = wire('session');
+        $sanitizer = wire('sanitizer');
+
+        // don't redirect if there was an error
+        foreach($errors as $error) {
+            if(get_class($error) === 'NoticeError') return;
+        }
+
+        switch($sanitizer->text($input->post->sbe_action)) {
+            case 'sbe_saveandnew':
+                $session->redirect($config->urls->admin . 'page/add/?parent_id=' . $page->parent->id);
+                break;
+
+            case 'sbe_saveandclose':
+                $session->redirect($config->urls->admin . 'page/?open=' . $page->parent->id);
+                break;
+        }
+    }
+}
